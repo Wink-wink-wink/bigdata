@@ -1,0 +1,331 @@
+
+import java.io.BufferedReader;
+
+
+
+import java.io.FileReader;
+
+
+
+import java.io.IOException;
+
+
+
+import java.util.HashMap;
+
+
+
+import java.util.Map;
+
+
+
+
+
+import org.apache.hadoop.conf.Configuration;
+
+
+
+import org.apache.hadoop.fs.Path;
+
+
+
+import org.apache.hadoop.io.DoubleWritable;
+
+
+
+import org.apache.hadoop.io.Text;
+
+
+
+import org.apache.hadoop.mapreduce.Job;
+
+
+
+import org.apache.hadoop.mapreduce.Mapper;
+
+
+
+import org.apache.hadoop.mapreduce.Reducer;
+
+
+
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+
+
+
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+
+
+
+
+public class test1 {
+
+
+
+
+
+public static class RatingMapper extends Mapper<Object, Text, Text, DoubleWritable> {
+
+
+
+
+
+private Text movieTitle = new Text();
+
+
+
+private DoubleWritable rating = new DoubleWritable();
+
+
+
+private Map<String, String> movieMap = new HashMap<>();
+
+
+
+
+
+@Override
+
+
+
+protected void setup(Context context) throws IOException, InterruptedException {
+
+
+
+super.setup(context);
+
+
+
+// 从movies.txt文件中读取movieid和title的映射关系
+
+
+
+try (BufferedReader br = new BufferedReader(new FileReader("/home/zhenqiang/ml-32m/movies.txt"))) {
+
+
+
+String line;
+
+
+
+while ((line = br.readLine()) != null) {
+
+
+
+String[] parts = line.split("\t");
+
+
+
+if (parts.length == 3) {
+
+
+
+movieMap.put(parts[0], parts[1]); // movieid -> title
+
+
+
+}
+
+
+
+}
+
+
+
+}
+
+
+
+}
+
+
+
+
+
+@Override
+
+
+
+public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+
+
+
+String[] parts = value.toString().split("\\s+");
+
+
+
+if (parts.length == 4) {
+
+
+
+String movieId = parts[1];
+
+
+
+String title = movieMap.get(movieId);
+
+
+
+if (title != null) {
+
+
+
+movieTitle.set(title);
+
+
+
+rating.set(Double.parseDouble(parts[2])); // rating
+
+
+
+context.write(movieTitle, rating);
+
+
+
+}
+
+
+
+}
+
+
+
+}
+
+
+
+}
+
+
+
+
+
+public static class RatingReducer extends Reducer<Text, DoubleWritable, Text, DoubleWritable> {
+
+
+
+
+
+private DoubleWritable result = new DoubleWritable();
+
+
+
+
+
+@Override
+
+
+
+public void reduce(Text key, Iterable<DoubleWritable> values, Context context)
+
+
+
+throws IOException, InterruptedException {
+
+
+
+double sum = 0;
+
+
+
+int count = 0;
+
+
+
+for (DoubleWritable val : values) {
+
+
+
+sum += val.get();
+
+
+
+count++;
+
+
+
+}
+
+
+
+double average = sum / count;
+
+
+
+result.set(average);
+
+
+
+context.write(key, result);
+
+
+
+}
+
+
+
+}
+
+
+
+
+
+public static void main(String[] args) throws Exception {
+
+
+
+Configuration conf = new Configuration();
+
+
+
+Job job = Job.getInstance(conf, "movie rating average");
+
+
+
+job.setJarByClass(test1.class);
+
+
+
+job.setMapperClass(RatingMapper.class);
+
+
+
+job.setCombinerClass(RatingReducer.class);
+
+
+
+job.setReducerClass(RatingReducer.class);
+
+
+
+job.setOutputKeyClass(Text.class);
+
+
+
+job.setOutputValueClass(DoubleWritable.class);
+
+
+
+FileInputFormat.addInputPath(job, new Path(args[0]));
+
+
+
+FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+
+
+System.exit(job.waitForCompletion(true) ? 0 : 1);
+
+
+
+}
+
+
+
+}
+
+
+
+
+
